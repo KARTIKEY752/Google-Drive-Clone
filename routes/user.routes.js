@@ -7,44 +7,7 @@ const bcrypt=require('bcrypt')
 const jwt=require('jsonwebtoken')
 
 
-router.get('/register',(req,res)=>{  
-    res.render('register');
-})
-router.post('/register',
-    body('email').trim().isEmail().isLength({min:13}),
-    body('password').trim().isLength({min:5}),
-    body('username').trim().isLength({min:3}),
-      async (req,res)=>{
 
-        const errors=validationResult(req);
-        
-    console.log(req.body)
-    
-    if(!errors.isEmpty()){
-       return res.status(400).json({
-        errors:errors.array(),
-        message:'invalid data'
-       })
-    }
-       const {email ,username,password}=req.body;
-
-           const hashPassword=await bcrypt.hash(password,12) //for keeping the password safe humlog bcrypt naam ka package install karenge 
-                            // npm i brcypt uske baad const bcrypt=require('bcrypt')
-                            //10 number of times hashing is performed 10 is a good value for the password to be hashed
-
-       const newUser= await userModel.create({
-        username,
-        email,
-        password: hashPassword,
-        
-        
-       })
-
-    
-    res.json(newUser)
-    
-
-})
 
 
 
@@ -109,13 +72,55 @@ router.post('/login',
     )
 
     res.cookie('token',token)
+    res.redirect('/home');
+    
        
-    res.send('Logged in');
+  
 
     }
 
 
 );
+router.get('/register',(req,res)=>{  
+    res.render('register');
+})
+router.post('/register',
+    body('email').trim().isEmail().isLength({min:13}),
+    body('password').trim().isLength({min:5}),
+    body('username').trim().isLength({min:3}),
+      async (req,res)=>{
+
+        const errors=validationResult(req);
+        
+    console.log(req.body)
+    
+    if(!errors.isEmpty()){
+       return res.status(400).json({
+        errors:errors.array(),
+        message:'invalid data'
+       })
+    }
+       const {email ,username,password}=req.body;
+
+           const hashPassword=await bcrypt.hash(password,12) //for keeping the password safe humlog bcrypt naam ka package install karenge 
+                            // npm i brcypt uske baad const bcrypt=require('bcrypt')
+                            //10 number of times hashing is performed 10 is a good value for the password to be hashed
+
+       const newUser= await userModel.create({
+        username,
+        email,
+        password: hashPassword,
+        
+        
+       })
+       
+       res.redirect('./login');
+
+    
+   
+    
+
+})
 module.exports=router;
 
 
