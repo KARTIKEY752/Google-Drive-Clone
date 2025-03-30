@@ -1,39 +1,51 @@
-const express=require('express');
-const authmiddleware=require('../middlewares/auth')
+const express = require('express');
+const authmiddleware = require('../middlewares/auth');
 const FileInfo = require('../models/files.model');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-const multer =require("multer");
+const router = express.Router();
 
-const router=express.Router();
+const uploadDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
-    destination:function (req, file, cb) {
-        return cb(null,'./uploads');
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
     },
-    filename: function (req, file, cb){
-        return cb(null, `${Date.now()}-${file.originalname}`);
+    filename: (req, file, cb) => {
+        cb(null, `${Date.now()}-${file.originalname}`);
     },
-})
+});
 
-const upload = multer({ storage: storage })
+const upload = multer({ storage });
 
-
-router.get('/home',authmiddleware,async (req,res)=>{
-    const userfiles= await FileInfo.find({
-        user_id:req.user.userId,
-        
-    })
-
-    console.log(userfiles)
-    res.render('home',{
-        files:userfiles,
-    })
-})
-
-
-
-router.post("/upload-file", authmiddleware, upload.single('file'), async (req, res) => {
+// Get user files
+router.get('/home', authmiddleware, async (req, res) => {
     try {
-        const uploadedFileInfo = await FileInfo.create( {
+        const userFiles = await FileInfo.find({ user_id: req.user.userId });
+        res.render('home', { 
+            files: userFiles, 
+            username: req.user.username,
+            success: req.query.success 
+        });
+    } catch (error) {
+        console.error('Error retrieving files:', error);
+        res.status(500).json({ error: 'Failed to retrieve files' });
+    }
+});
+
+// Upload file
+router.post('/upload-file', authmiddleware, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const fileRecord = new FileInfo({
             file_uploaded_by: req.user.username,
             user_id: req.user.userId,
             filename: req.file.originalname,
@@ -42,21 +54,59 @@ router.post("/upload-file", authmiddleware, upload.single('file'), async (req, r
             size: req.file.size,
         });
 
-        // Save file information to MongoDB
-        const fileRecord = new FileInfo(uploadedFileInfo);
-        await fileRecord.save(); // Use `await` to save the document asynchronously
-
-        console.log("File info saved:", fileRecord);
-
-        // Send the uploaded file information as JSON
-        return res.json({ message: "File uploaded successfully", fileRecord });
+        await fileRecord.save();
+        res.json({ 
+            success: true, 
+            file: fileRecord,
+            message: 'File uploaded successfully!' 
+        });
     } catch (error) {
-        console.error("Error saving file info:", error);
-        return res.status(500).json({ error: "Failed to upload file" });
+        console.error('Error saving file info:', error);
+        res.status(500).json({ error: 'Failed to upload file' });
     }
 });
 
+// Delete file
+router.delete('/delete-file/:id', authmiddleware, async (req, res) => {
+    try {
+        const file = await FileInfo.findOne({
+            _id: req.params.id,
+            user_id: req.user.userId
+        });
 
+        if (!file) return res.status(404).json({ error: 'File not found' });
 
+        fs.unlinkSync(file.path);
+        await FileInfo.deleteOne({ _id: req.params.id });
+        
+        res.json({ success: true, message: 'File deleted successfully!' });
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).json({ error: 'Failed to delete file' });
+    }
+});
 
-module.exports=router;
+// Search files
+router.get('/search', authmiddleware, async (req, res) => {
+    try {
+        const searchQuery = req.query.q;
+        if (!searchQuery) {
+            return res.status(400).json({ error: 'Search query is required' });
+        }
+
+        const searchResults = await FileInfo.find({
+            user_id: req.user.userId,
+            filename: { $regex: searchQuery, $options: 'i' }
+        });
+
+        res.render('home', { 
+            files: searchResults, 
+            username: req.user.username 
+        });
+    } catch (error) {
+        console.error('Error searching files:', error);
+        res.status(500).json({ error: 'Failed to search files' });
+    }
+});
+
+module.exports = router;
